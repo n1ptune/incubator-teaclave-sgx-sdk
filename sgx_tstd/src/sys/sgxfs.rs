@@ -20,9 +20,9 @@ use crate::io::{self, Error, SeekFrom};
 use crate::os::unix::prelude::*;
 use crate::path::Path;
 use crate::sys_common::FromInner;
-use sgx_libc as libc;
+use sgx_trts::libc;
 use sgx_tprotected_fs::{self, SgxFileStream};
-use sgx_types::{sgx_align_key_128bit_t, sgx_key_128bit_t, sgx_status_t};
+use sgx_types::{sgx_status_t, sgx_key_128bit_t, sgx_align_key_128bit_t, sgx_aes_gcm_128bit_tag_t};
 
 pub struct SgxFile(SgxFileStream);
 
@@ -84,36 +84,36 @@ impl SgxFile {
         let path = cstr(path)?;
         let mode = opts.get_access_mode()?;
         let opts = CString::new(mode.as_bytes())?;
-        SgxFile::open_c(&path, &opts, None, true, None)
+        SgxFile::open_c(&path, &opts, Some(&sgx_key_128bit_t::default()), true, false, None)
     }
 
     pub fn open_ex(path: &Path, opts: &OpenOptions, key: &sgx_key_128bit_t) -> io::Result<SgxFile> {
         let path = cstr(path)?;
         let mode = opts.get_access_mode()?;
         let opts = CString::new(mode.as_bytes())?;
-        SgxFile::open_c(&path, &opts, Some(key), false, None)
+        SgxFile::open_c(&path, &opts, Some(key), false, false, None)
     }
 
-    pub fn open_with(
-        path: &Path,
-        opts: &OpenOptions,
-        key: Option<&sgx_key_128bit_t>,
-        cache_size: Option<u64>,
-    ) -> io::Result<SgxFile> {
+    pub fn open_integrity_only(path: &Path, opts: &OpenOptions) -> io::Result<SgxFile> {
+
         let path = cstr(path)?;
         let mode = opts.get_access_mode()?;
         let opts = CString::new(mode.as_bytes())?;
-        SgxFile::open_c(&path, &opts, key, false, cache_size)
+        SgxFile::open_c(&path, &opts, Some(&sgx_key_128bit_t::default()), false, true, None)
     }
 
-    pub fn open_c(
-        path: &CStr,
-        opts: &CStr,
-        key: Option<&sgx_key_128bit_t>,
-        auto: bool,
-        cache_size: Option<u64>,
-    ) -> io::Result<SgxFile> {
-        let file = if cache_size.is_some() {
+    pub fn open_with(path: &Path, opts: &OpenOptions, key: Option<&sgx_key_128bit_t>, cache_size: Option<u64>) -> io::Result<SgxFile> {
+        let path = cstr(path)?;
+        let mode = opts.get_access_mode()?;
+        let opts = CString::new(mode.as_bytes())?;
+        SgxFile::open_c(&path, &opts, key, false, false, cache_size)
+    }
+
+    pub fn open_c(path: &CStr, opts: &CStr, key: Option<&sgx_key_128bit_t>, auto: bool, integrity_only: bool, cache_size: Option<u64>) -> io::Result<SgxFile> {
+
+        let file = if integrity_only == true {
+            SgxFileStream::open_integrity_only(path, opts)
+        } else if cache_size.is_some() {
             SgxFileStream::open_ex(path, opts, key, cache_size.unwrap())
         } else if auto == true || key.is_none() {
             SgxFileStream::open_auto_key(path, opts)
@@ -121,18 +121,20 @@ impl SgxFile {
             SgxFileStream::open(path, opts, key.unwrap())
         };
 
-        file.map(SgxFile).map_err(|err| match err {
-            1 => Error::from_sgx_error(sgx_status_t::SGX_ERROR_UNEXPECTED),
-            2 => Error::from_raw_os_error(libc::ENOENT),
-            3 => Error::from_sgx_error(sgx_status_t::SGX_ERROR_OUT_OF_MEMORY),
-            4 | 5 => Error::from_raw_os_error(err),
-            r if r > 4096 => {
-                let status =
-                    sgx_status_t::from_repr(r as u32).unwrap_or(sgx_status_t::SGX_ERROR_UNEXPECTED);
-                Error::from_sgx_error(status)
-            }
-            _ => Error::from_raw_os_error(err),
-        })
+        file.map(SgxFile)
+            .map_err(|err| {
+                match err {
+                    1 => Error::from_sgx_error(sgx_status_t::SGX_ERROR_UNEXPECTED),
+                    2 => Error::from_raw_os_error(libc::ENOENT),
+                    3 => Error::from_sgx_error(sgx_status_t::SGX_ERROR_OUT_OF_MEMORY),
+                    4 | 5 => Error::from_raw_os_error(err),
+                    r if r > 4096 => {
+                        let status = sgx_status_t::from_repr(r as u32).unwrap_or(sgx_status_t::SGX_ERROR_UNEXPECTED);
+                        Error::from_sgx_error(status)
+                    },
+                    _ => Error::from_raw_os_error(err),
+                }
+            })
     }
 
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
@@ -234,6 +236,23 @@ impl SgxFile {
                 Error::from_sgx_error(status)
             }
             _ => Error::from_raw_os_error(err),
+        })
+    }
+
+    pub fn get_mac(&self) -> io::Result<sgx_aes_gcm_128bit_tag_t> {
+
+        self.0.get_mac().map_err(|err| {
+            match err {
+                1 => Error::from_sgx_error(sgx_status_t::SGX_ERROR_UNEXPECTED),
+                2 => Error::from_sgx_error(sgx_status_t::SGX_ERROR_INVALID_PARAMETER),
+                3 => Error::from_sgx_error(sgx_status_t::SGX_ERROR_OUT_OF_MEMORY),
+                4 | 5 => Error::from_raw_os_error(err),
+                r if r > 4096 => {
+                    let status = sgx_status_t::from_repr(r as u32).unwrap_or(sgx_status_t::SGX_ERROR_UNEXPECTED);
+                    Error::from_sgx_error(status)
+                },
+                _ => Error::from_raw_os_error(err),
+            }
         })
     }
 }
