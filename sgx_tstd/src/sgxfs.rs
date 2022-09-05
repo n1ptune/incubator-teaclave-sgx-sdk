@@ -21,7 +21,7 @@ use crate::io::{self, Read, Seek, SeekFrom, Write};
 use crate::path::Path;
 use crate::sys::sgxfs as fs_imp;
 use crate::sys_common::{AsInner, AsInnerMut, FromInner, IntoInner};
-use sgx_types::{sgx_key_128bit_t, sgx_align_key_128bit_t, sgx_aes_gcm_128bit_tag_t};
+use sgx_types::{sgx_aes_gcm_128bit_tag_t, sgx_align_key_128bit_t, sgx_key_128bit_t};
 
 /// A reference to an open file on the filesystem.
 ///
@@ -119,7 +119,9 @@ impl SgxFile {
     /// Other errors may also be returned according to [`OpenOptions::open`].
     ///
     pub fn open_integrity_only<P: AsRef<Path>>(path: P) -> io::Result<SgxFile> {
-        OpenOptions::new().read(true).open_integrity_only(path.as_ref())
+        OpenOptions::new()
+            .read(true)
+            .open_integrity_only(path.as_ref())
     }
 
     /// Opens a file in write-only mode.
@@ -137,7 +139,9 @@ impl SgxFile {
     /// and will truncate it if it does.
     ///
     pub fn create_integrity_only<P: AsRef<Path>>(path: P) -> io::Result<SgxFile> {
-        OpenOptions::new().write(true).open_integrity_only(path.as_ref())
+        OpenOptions::new()
+            .write(true)
+            .open_integrity_only(path.as_ref())
     }
 
     pub fn open_ex<P: AsRef<Path>>(path: P, key: &sgx_key_128bit_t) -> io::Result<SgxFile> {
@@ -326,7 +330,12 @@ impl OpenOptions {
         self._open_integrity_only(path.as_ref())
     }
 
-    pub fn open_with<P: AsRef<Path>>(&self, path: P, key: Option<&sgx_key_128bit_t>, cache_size: Option<u64>) -> io::Result<SgxFile> {
+    pub fn open_with<P: AsRef<Path>>(
+        &self,
+        path: P,
+        key: Option<&sgx_key_128bit_t>,
+        cache_size: Option<u64>,
+    ) -> io::Result<SgxFile> {
         self._open_with(path.as_ref(), key, cache_size)
     }
 
@@ -345,7 +354,12 @@ impl OpenOptions {
         Ok(SgxFile { inner: inner })
     }
 
-    fn _open_with(&self, path: &Path, key: Option<&sgx_key_128bit_t>, cache_size: Option<u64>) -> io::Result<SgxFile> {
+    fn _open_with(
+        &self,
+        path: &Path,
+        key: Option<&sgx_key_128bit_t>,
+        cache_size: Option<u64>,
+    ) -> io::Result<SgxFile> {
         let inner = fs_imp::SgxFile::open_with(path, &self.0, key, cache_size)?;
         Ok(SgxFile { inner })
     }
