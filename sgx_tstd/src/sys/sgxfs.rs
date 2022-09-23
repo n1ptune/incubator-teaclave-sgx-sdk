@@ -84,47 +84,34 @@ impl SgxFile {
         let path = cstr(path)?;
         let mode = opts.get_access_mode()?;
         let opts = CString::new(mode.as_bytes())?;
-        SgxFile::open_c(
-            &path,
-            &opts,
-            Some(&sgx_key_128bit_t::default()),
-            true,
-            false,
-            None,
-        )
+        SgxFile::open_c(&path, &opts, None, true, false, None, None)
     }
 
     pub fn open_ex(path: &Path, opts: &OpenOptions, key: &sgx_key_128bit_t) -> io::Result<SgxFile> {
         let path = cstr(path)?;
         let mode = opts.get_access_mode()?;
         let opts = CString::new(mode.as_bytes())?;
-        SgxFile::open_c(&path, &opts, Some(key), false, false, None)
+        SgxFile::open_c(&path, &opts, Some(key), false, false, None, None)
     }
 
     pub fn open_integrity_only(path: &Path, opts: &OpenOptions) -> io::Result<SgxFile> {
         let path = cstr(path)?;
         let mode = opts.get_access_mode()?;
         let opts = CString::new(mode.as_bytes())?;
-        SgxFile::open_c(
-            &path,
-            &opts,
-            Some(&sgx_key_128bit_t::default()),
-            false,
-            true,
-            None,
-        )
+        SgxFile::open_c(&path, &opts, None, false, true, None, None)
     }
 
     pub fn open_with(
         path: &Path,
         opts: &OpenOptions,
         key: Option<&sgx_key_128bit_t>,
+        key_policy: Option<u16>,
         cache_size: Option<u64>,
     ) -> io::Result<SgxFile> {
         let path = cstr(path)?;
         let mode = opts.get_access_mode()?;
         let opts = CString::new(mode.as_bytes())?;
-        SgxFile::open_c(&path, &opts, key, false, false, cache_size)
+        SgxFile::open_c(&path, &opts, key, false, false, key_policy, cache_size)
     }
 
     pub fn open_c(
@@ -133,16 +120,19 @@ impl SgxFile {
         key: Option<&sgx_key_128bit_t>,
         auto: bool,
         integrity_only: bool,
+        key_policy: Option<u16>,
         cache_size: Option<u64>,
     ) -> io::Result<SgxFile> {
-        let file = if integrity_only == true {
+        let file = if integrity_only {
             SgxFileStream::open_integrity_only(path, opts)
-        } else if cache_size.is_some() {
-            SgxFileStream::open_ex(path, opts, key, cache_size.unwrap())
-        } else if auto == true || key.is_none() {
+        } else if auto {
             SgxFileStream::open_auto_key(path, opts)
+        } else if cache_size.is_some() {
+            SgxFileStream::open_ex(path, opts, key, key_policy, cache_size)
+        } else if let Some(key) = key {
+            SgxFileStream::open(path, opts, key)
         } else {
-            SgxFileStream::open(path, opts, key.unwrap())
+            SgxFileStream::open_ex(path, opts, None, key_policy, None)
         };
 
         file.map(SgxFile).map_err(|err| match err {
@@ -325,9 +315,13 @@ pub fn export_align_auto_key(path: &Path) -> io::Result<sgx_align_key_128bit_t> 
     })
 }
 
-pub fn import_auto_key(path: &Path, key: &sgx_key_128bit_t) -> io::Result<()> {
+pub fn import_auto_key(
+    path: &Path,
+    key: &sgx_key_128bit_t,
+    key_policy: Option<u16>,
+) -> io::Result<()> {
     let path = cstr(path)?;
-    sgx_tprotected_fs::import_auto_key(&path, key).map_err(|err| match err {
+    sgx_tprotected_fs::import_auto_key(&path, key, key_policy).map_err(|err| match err {
         1 => Error::from_sgx_error(sgx_status_t::SGX_ERROR_UNEXPECTED),
         2 => Error::from_raw_os_error(libc::ENOENT),
         3 => Error::from_sgx_error(sgx_status_t::SGX_ERROR_OUT_OF_MEMORY),
