@@ -965,6 +965,7 @@ extern "C" {
         filename: *const c_char,
         mode: *const c_char,
         key: *const sgx_key_128bit_t,
+        key_policy: uint16_t,
         cache_size: uint64_t,
     ) -> SGX_FILE;
     pub fn sgx_fwrite(ptr: *const c_void, size: size_t, count: size_t, stream: SGX_FILE) -> size_t;
@@ -978,7 +979,11 @@ extern "C" {
     pub fn sgx_fclose(stream: SGX_FILE) -> int32_t;
     pub fn sgx_remove(filename: *const c_char) -> int32_t;
     pub fn sgx_fexport_auto_key(filename: *const c_char, key: *mut sgx_key_128bit_t) -> int32_t;
-    pub fn sgx_fimport_auto_key(filename: *const c_char, key: *const sgx_key_128bit_t) -> int32_t;
+    pub fn sgx_fimport_auto_key(
+        filename: *const c_char,
+        key: *const sgx_key_128bit_t,
+        key_policy: uint16_t,
+    ) -> int32_t;
     pub fn sgx_fclear_cache(stream: SGX_FILE) -> int32_t;
     pub fn sgx_fget_mac(stream: SGX_FILE, mac: *mut sgx_aes_gcm_128bit_tag_t) -> int32_t;
 }
