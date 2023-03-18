@@ -413,6 +413,14 @@ pub enum SgxThreadPolicy {
     Unbound,
 }
 
+#[repr(u32)]
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum EnclaveMode {
+    Hw    = 1,
+    Sim   = 2,
+    Hyper = 3,
+}
+
 ///
 /// rsgx_get_thread_data is to get TD base address per thread.
 ///
@@ -694,4 +702,14 @@ pub fn rsgx_get_enclave_entry() -> usize {
     }
     let entry_addr: unsafe extern "C" fn() = enclave_entry;
     entry_addr as usize
+}
+
+#[inline]
+pub fn rsgx_get_enclave_mode() -> EnclaveMode {
+    match unsafe { sgx_get_enclave_mode() } {
+        1 => EnclaveMode::Hw,
+        2 => EnclaveMode::Sim,
+        3 => EnclaveMode::Hyper,
+        _ => EnclaveMode::Hw,
+    }
 }

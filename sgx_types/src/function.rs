@@ -688,6 +688,11 @@ extern "C" {
         page_properties_from: int32_t,
         page_properties_to: int32_t,
     ) -> int32_t;
+
+    //
+    // sgx_mode.h
+    //
+    pub fn sgx_get_enclave_mode() -> c_int;
 }
 
 /* intel sgx sdk 2.18 */
