@@ -697,6 +697,10 @@ extern "C" {
         args: *const c_void,
     ) -> sgx_status_t;
     pub fn sgx_unregister_aex_handler(handler: sgx_aex_mitigation_fn_t) -> sgx_status_t;
+    //
+    // sgx_mode.h
+    //
+    pub fn sgx_get_enclave_mode() -> c_int;
 }
 
 /* intel sgx sdk 2.18 */
