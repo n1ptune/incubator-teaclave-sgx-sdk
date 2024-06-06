@@ -551,6 +551,7 @@ pub const SGX_LEGACY_REPORT_TYPE: uint8_t = 0x0; // SGX Legacy Report Type
 pub const TEE_REPORT2_TYPE: uint8_t = 0x81; // TEE Report Type2
 pub const TEE_REPORT2_SUBTYPE: uint8_t = 0x0; // SUBTYPE for Report Type2 is 0
 pub const TEE_REPORT2_VERSION: uint8_t = 0x0; // VERSION for Report Type2 is 0
+pub const TEE_REPORT2_VERSION_SERVICETD: uint8_t = 0x1; // VERSION for Report Type2 which mr_servicetd is used
 
 pub const SGX_REPORT2_MAC_RESERVED1_BYTES: size_t = 12;
 pub const SGX_REPORT2_MAC_RESERVED2_BYTES: size_t = 32;
