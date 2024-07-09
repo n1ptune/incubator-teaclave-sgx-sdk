@@ -108,18 +108,18 @@ typedef struct _sgx_tcs_info_t {
 sgx_tcs_info_cache_t *SgxTcsInfoCache = NULL;
 static sgx_spinlock_t g_spin_lock;
 
-se_handle_t se_event_init(void)
+se_handle_t untrusted_event_init(void)
 {
     return calloc(1, sizeof(int)); 
 }
 
-void se_event_destroy(se_handle_t se_event)
+void untrusted_event_destroy(se_handle_t se_event)
 {
     if (se_event != NULL)
         free(se_event); 
 }
 
-int se_event_wait(se_handle_t se_event)
+int untrusted_event_wait(se_handle_t se_event)
 {
     int ret = 0;
     if (se_event == NULL)
@@ -141,7 +141,7 @@ int se_event_wait(se_handle_t se_event)
     return 0;
 }
 
-int se_event_wait_timeout(se_handle_t se_event, const struct timespec *timeout)
+int untrusted_event_wait_timeout(se_handle_t se_event, const struct timespec *timeout)
 {
     long ret = -1;
 
@@ -150,24 +150,27 @@ int se_event_wait_timeout(se_handle_t se_event, const struct timespec *timeout)
     }
 
     if (timeout == NULL) {
-        return se_event_wait(se_event);
+        return untrusted_event_wait(se_event);
     }
     
     if (__sync_fetch_and_add((int *)se_event, -1) == 0) {
         
         ret = syscall(__NR_futex, se_event, FUTEX_WAIT, -1, timeout, 0, 0);
         if (ret < 0) {
-            if (errno == ETIMEDOUT) {
+            if (errno == ETIMEDOUT || errno == EINTR || errno == EAGAIN) {
                 //If the futex is exit with timeout (se_event still equal to ' -1'), the se_event value need reset to 0.
                 __sync_val_compare_and_swap((int*)se_event, -1, 0);  
                 return -1;
+            } else {
+                fprintf(stderr, "The untrusted_event_wait_timeout function Futex syscall failed with errno: %d\n", errno);
+                abort();
             }
         }
     }
     return 0;
 }
 
-int se_event_wake(se_handle_t se_event)
+int untrusted_event_wake(se_handle_t se_event)
 {
     if (se_event == NULL)
         return EINVAL;
@@ -205,7 +208,7 @@ void sgx_tcs_cache_destory(sgx_tcs_info_cache_t **cache)
 					sgx_tcs_info_t, entry);
         if (p) {
             
-            se_event_destroy(p->se_event);
+            untrusted_event_destroy(p->se_event);
             free(p);
             list_del(&p->entry);
         }
@@ -241,7 +244,7 @@ se_handle_t sgx_tcs_event_get(sgx_tcs_info_cache_t *cache, const tcs_handle_t tc
     }
 
     p->tcs = tcs;
-    se_event = p->se_event = se_event_init();
+    se_event = p->se_event = untrusted_event_init();
    
     list_add(&p->entry, &cache->tcs_cache_list);
     pthread_mutex_unlock(&cache->lock);
@@ -278,7 +281,7 @@ int u_thread_set_event_ocall(int *error, const tcs_handle_t tcs)
         return -1;
     }
 
-    int ret = se_event_wake(se_event); 
+    int ret = untrusted_event_wake(se_event); 
     if (ret != 0) {
         if (error) {
             *error = errno;   
@@ -310,9 +313,9 @@ int u_thread_wait_event_ocall(int *error, const tcs_handle_t tcs, const struct t
 
     int ret = 0;
     if (timeout == NULL) {
-        ret = se_event_wait(se_event);
+        ret = untrusted_event_wait(se_event);
     } else {
-        ret = se_event_wait_timeout(se_event, timeout);
+        ret = untrusted_event_wait_timeout(se_event, timeout);
     }
     if (ret != 0) {
         if (error) {
@@ -343,7 +346,7 @@ int u_thread_set_multiple_events_ocall(int *error, const tcs_handle_t *tcss, int
            return -1;
         }
 
-        int ret = se_event_wake(se_event);
+        int ret = untrusted_event_wake(se_event);
         if (ret != 0) {
             if (error) {
                 *error = errno;  

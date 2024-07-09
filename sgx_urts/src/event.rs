@@ -43,11 +43,13 @@ impl SeEvent {
             };
             if ret < 0 {
                 let err = Error::last_os_error().raw_os_error().unwrap_or(0);
-                if err == libc::ETIMEDOUT {
+                if err == libc::ETIMEDOUT || err == libc::EINTR || err == libc::EAGAIN {
                     let _ = self
                         .event
                         .compare_exchange(-1, 0, Ordering::SeqCst, Ordering::SeqCst);
                     return -1;
+                } else {
+                    panic!();
                 }
             }
         }
@@ -58,7 +60,15 @@ impl SeEvent {
         if self.event.fetch_add(-1, Ordering::SeqCst) == 0 {
             let ret = unsafe { libc::syscall(libc::SYS_futex, self, FUTEX_WAIT, -1, 0, 0, 0) };
             if ret < 0 {
-                let _err = Error::last_os_error().raw_os_error().unwrap_or(0);
+                let err = Error::last_os_error().raw_os_error().unwrap_or(0);
+                if err == libc::EINTR || err == libc::EAGAIN {
+                    let _ = self
+                        .event
+                        .compare_exchange(-1, 0, Ordering::SeqCst, Ordering::SeqCst);
+                    return -1;
+                } else {
+                    panic!();
+                }
             }
         }
         0
